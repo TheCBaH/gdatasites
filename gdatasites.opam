@@ -1,0 +1,15 @@
+opam-version: "1.2"
+authors: [ "Vladimir N. Silyaev" ]
+license: "ISC"
+homepage: "https://github.com/TheCBaH/gdatasites"
+bug-reports: "https://github.com/TheCBaH/gdatasites/issues"
+dev-repo: "https://github.com/TheCBaH/gdaatasites.git"
+build: [
+  ["jbuilder" "subst"] {pinned}
+  ["jbuilder" "build" "-p" name "-j" jobs]
+]
+depends: [
+  "jbuilder" {build & >= "1.0+beta10"}
+  "gdata-api"
+]
+available: [ ocaml-version >= "4.03.0" ]

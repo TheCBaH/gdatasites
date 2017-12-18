@@ -1,0 +1,11 @@
+(jbuild_version 1)
+
+(library
+ ((name        gdatasites)
+  (public_name gdatasites)
+  (wrapped false)
+  (synopsis "OCaml Google Sites API")
+  (libraries
+    (gapi-ocaml.gdata
+     ))
+  ))

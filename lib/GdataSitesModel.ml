@@ -1,17 +1,15 @@
-let namespace = "http://schemas.google.com/sites/2008"
-
+let ns_sites = "http://schemas.google.com/sites/2008"
 let endpoint = "https://sites.google.com/feeds/"
 
-let ns = "site"
-
-let ns_sites = namespace
-
-let get_sites_prefix namespace' =
-  if namespace' = namespace then "docs" else GdataACL.get_acl_prefix ns
+let get_sites_prefix namespace =
+ if namespace = ns_sites then "site" else GdataACL.get_acl_prefix namespace
 
 
 let parse_xml_data_model tree =
   match tree with
+  | GapiCore.AnnotatedTree.Leaf
+    ([`Attribute; `Name ns ; `Namespace "http://www.w3.org/2000/xmlns/"],_) ->
+     `Namespace
   | GapiCore.AnnotatedTree.Leaf
       ([`Attribute; (`Name "etag"); (`Namespace ns)], v)
     when ns = GdataAtom.ns_gd ->
@@ -99,7 +97,7 @@ module Content = struct
       ; summary: GdataAtom.Summary.t
       ; pageName: string
       ; revision: int
-      ; extensions: GdataCore.xml_data_model list
+      ; extensions: GdataAtom.GenericExtensions.t
       ; content: content }
 
     let empty =
@@ -115,7 +113,7 @@ module Content = struct
       ; author= GdataAtom.Author.empty
       ; pageName= ""
       ; revision= 0
-      ; extensions= []
+      ; extensions=GdataAtom.GenericExtensions.empty
       ; content= Empty }
 
 
@@ -136,7 +134,7 @@ module Content = struct
         ; GdataAtom.Author.to_xml_data_model entry.author
         ; GdataAtom.render_text_element ns_sites "pageName" entry.pageName
         ; GdataAtom.render_int_element ns_sites "revision" entry.revision
-        ; entry.extensions ]
+        ; GdataAtom.GenericExtensions.to_xml_data_model entry.extensions ]
 
 
     let of_xml_data_model entry tree =
@@ -151,6 +149,7 @@ module Content = struct
       | `Link link -> {entry with links= link :: entry.links}
       | `Author author -> {entry with author}
       | `Summary summary -> {entry with summary}
+      | `Namespace -> entry
       | `Other
           GapiCore.AnnotatedTree.Node
             ( [`Element; (`Name "pageName"); (`Namespace ns)]
@@ -181,8 +180,12 @@ module Content = struct
         when ns = GdataAtom.ns_atom ->
           {entry with content= Attachment (content_type, src)}
       | _ ->
-          let extensions = tree :: entry.extensions in
-          {entry with extensions}
+          let extensions =
+              GdataAtom.GenericExtensions.of_xml_data_model
+                entry.extensions
+                tree
+            in
+              { entry with extensions }
 
   end
 
@@ -206,7 +209,7 @@ module Content = struct
   let make_category name =
     let category_scheme = "http://schemas.google.com/g/2005#kind" in
     { GdataAtom.Category.empty with
-      scheme= category_scheme
+      GdataAtom.Category.scheme= category_scheme
     ; term= "http://schemas.google.com/sites/2008#" ^ name
     ; label= name }
 
@@ -228,7 +231,7 @@ module Site = struct
       ; links: GdataAtom.Link.t list
       ; siteName: string
       ; theme: string
-      ; extensions: GdataCore.xml_data_model list }
+      ; extensions: GdataAtom.GenericExtensions.t }
 
     let empty =
       { etag= ""
@@ -240,7 +243,7 @@ module Site = struct
       ; links= []
       ; siteName= ""
       ; theme= ""
-      ; extensions= [] }
+      ; extensions= GdataAtom.GenericExtensions.empty}
 
 
     let to_xml_data_model entry =
@@ -256,7 +259,7 @@ module Site = struct
         ; GdataAtom.Title.to_xml_data_model entry.title
         ; GdataAtom.render_text_element ns_sites "siteName" entry.siteName
         ; GdataAtom.render_text_element ns_sites "theme" entry.theme
-        ; entry.extensions ]
+        ; GdataAtom.GenericExtensions.to_xml_data_model entry.extensions ]
 
 
     let of_xml_data_model entry tree =
@@ -268,6 +271,7 @@ module Site = struct
       | `Summary summary -> {entry with summary}
       | `Title title -> {entry with title}
       | `Link link -> {entry with links= link :: entry.links}
+      | `Namespace -> entry
       | `Other
           GapiCore.AnnotatedTree.Node
             ( [`Element; (`Name "siteName"); (`Namespace ns)]
@@ -281,7 +285,10 @@ module Site = struct
         when ns = ns_sites ->
           {entry with theme= v}
       | _ ->
-          let extensions = tree :: entry.extensions in
+         let extensions =
+           GdataAtom.GenericExtensions.of_xml_data_model
+                entry.extensions
+                tree in
           {entry with extensions}
 
   end

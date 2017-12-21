@@ -171,6 +171,34 @@ module Site = struct
 end
 
 module Content = struct
+  module Category = struct
+    let to_string = function
+      | `Announcement -> "announcement"
+      | `AnnouncementPage -> "announcementpage"
+      | `Attachment -> "attachment"
+      | `Comment -> "comment"
+      | `FileCabinet -> "filecabinet"
+      | `ListItem -> "listitem"
+      | `ListPage -> "listpage"
+      | `WebPage -> "webpage"
+      | `WebAttachment -> "webattachment"
+      | `Template -> "template"
+
+
+    let make category =
+      let name = to_string category in
+      let category_scheme = "http://schemas.google.com/g/2005#kind" in
+      { GdataAtom.Category.empty with
+        GdataAtom.Category.scheme= category_scheme
+      ; term= "http://schemas.google.com/sites/2008#" ^ name
+      ; label= name }
+
+
+    let attachment = make `Attachment
+
+    let webpage = make `WebPage
+  end
+
   module Entry = struct
     type content = Empty | Attachment of string * string | Xhtml of string
 
@@ -314,18 +342,6 @@ module Content = struct
   let feed_to_data_model =
     GdataAtom.element_to_data_model get_sites_prefix Feed.to_xml_data_model
 
-
-  let make_category name =
-    let category_scheme = "http://schemas.google.com/g/2005#kind" in
-    { GdataAtom.Category.empty with
-      GdataAtom.Category.scheme= category_scheme
-    ; term= "http://schemas.google.com/sites/2008#" ^ name
-    ; label= name }
-
-
-  let attachment_category = make_category "attachment"
-
-  let webpage_category = make_category "webpage"
 
   module Rel = struct
     type t = [`Self | `Alternate | `Edit | `Media | `Parent | `Template]

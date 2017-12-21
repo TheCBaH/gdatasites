@@ -88,7 +88,7 @@ let query_content_list ?domain ?etag ?query site session =
           | `Ancestor s -> ("ancestor", s)
           | `Include_deleted b -> ("include-deleted", string_of_bool b)
           | `Include_draft b -> ("include-draft", string_of_bool b)
-          | `Category c -> ("category", string_of_category c)
+          | `Category c -> ("category", Content.Category.to_string c)
           | `Parent s -> ("parent", s)
           | `Path p -> ("path", "/" ^ String.concat "/" p)
           | #basic_parameters as q -> query_to_key_value q)
@@ -171,7 +171,7 @@ let create_attachment ?domain ?summary ~parent ~title ~content_type ~payload
   in
   let entry =
     { Content.Entry.empty with
-      Content.Entry.category= Content.attachment_category
+      Content.Entry.category= Content.Category.attachment
     ; title= {GdataAtom.Title.empty with GdataAtom.Title.value= title}
     ; links= [Content.make_link `Parent parent] }
   in
@@ -202,7 +202,7 @@ let create_webpage ?domain ?summary ?parent ~title ?pageName ?html ?template
   in
   let entry =
     { Content.Entry.empty with
-      Content.Entry.category= Content.webpage_category
+      Content.Entry.category= Content.Category.webpage
     ; title= {GdataAtom.Title.empty with GdataAtom.Title.value= title}
     ; links }
   in
@@ -245,4 +245,40 @@ let update_content ?media_source entry session =
     ~version ?etag entry url
     (fun pipe _ -> parse_content_entry pipe)
     session
+
+
+let query_revision_list ?(domain= "site") ~site ?query ?revisionEntryId
+    contentEntryId session =
+  let url =
+    endpoint ^ "revision/" ^ domain ^ "/" ^ site ^ "/" ^ contentEntryId ^ "/"
+  in
+  let url =
+    match revisionEntryId with
+    | Some revision -> url ^ revision ^ "/"
+    | None -> url
+  in
+  let query_parameters = parameters_of_query query_to_key_value query in
+  GdataService.query ~version ?query_parameters url parse_site_feed session
+
+
+let parse_url =
+  let re_endpoint = Str.regexp_string endpoint and re_slash = Str.regexp "/" in
+  fun url ->
+    if Str.string_match re_endpoint url 0 then
+      match
+        Str.split re_slash
+          (let len = String.length endpoint in
+           String.sub url len (String.length url - len))
+      with
+      | [feed; domain; site; id] -> Some (feed, domain, site, id, None)
+      | [feed; domain; site; id; revision] ->
+          Some (feed, domain, site, id, Some revision)
+      | _ -> None
+    else None
+
+
+let id_of_entry entry =
+  match parse_url entry.Content.Entry.id with
+  | Some (_, _, _, id, _) -> id
+  | _ -> "Invalud url: " ^ entry.Content.Entry.id |> failwith
 

@@ -40,7 +40,7 @@ let query_to_key_value = function
   | `Max_results n -> ("max-results", string_of_int n)
   | `Published_max date -> ("published-max", GapiDate.to_string date)
   | `Published_min date -> ("published-min", GapiDate.to_string date)
-  | `Start_index n -> ("published-min", string_of_int n)
+  | `Start_index n -> ("start-index", string_of_int n)
   | `Q s -> ("q", s)
 
 
@@ -104,20 +104,6 @@ let media_source_payload media =
   | _ -> failwith "media_source_payload not supported"
 
 
-let make_payload ?media_source data_to_tree data =
-  match media_source with
-  | None ->
-      let tree = Content.entry_to_data_model data in
-      let xml = GdataUtils.data_to_xml_string tree in
-      GapiCore.PostData.Body
-        (GapiCore.PostData.String xml, GdataCore.default_content_type)
-  | Some media_source ->
-      let payload = media_source_payload media_source in
-      GapiCore.PostData.Body
-        ( GapiCore.PostData.String payload
-        , media_source.GapiMediaResource.content_type )
-
-
 let make_multipart ?media_source data_to_tree data =
   let tree = Content.entry_to_data_model data in
   let xml = GdataUtils.data_to_xml_string tree in
@@ -161,14 +147,16 @@ let create_content ?domain ?media_source site entry session =
     session
 
 
+let make_media_source ~name ~content_type ~payload =
+  { GapiMediaResource.source= GapiMediaResource.String payload
+  ; name
+  ; content_type
+  ; content_length= String.length payload |> Int64.of_int }
+
+
 let create_attachment ?domain ?summary ~parent ~title ~content_type ~payload
     ~site session =
-  let media_source =
-    { GapiMediaResource.source= GapiMediaResource.String payload
-    ; name= title
-    ; content_type
-    ; content_length= String.length payload |> Int64.of_int }
-  in
+  let media_source = make_media_source ~name:title ~content_type ~payload in
   let entry =
     { Content.Entry.empty with
       Content.Entry.category= Content.Category.attachment
@@ -247,6 +235,22 @@ let update_content ?media_source entry session =
     session
 
 
+let update_attachment ~content_type ~payload entry session =
+  let media_source =
+    make_media_source ~name:entry.Content.Entry.title.GdataAtom.Title.value
+      ~content_type ~payload
+  in
+  update_content ~media_source
+    { entry with
+      Content.Entry.content= Content.Entry.empty.Content.Entry.content }
+    session
+
+
+let update_html ~html entry session =
+  update_content {entry with Content.Entry.content= Content.Entry.Xhtml html}
+    session
+
+
 let query_revision_list ?(domain= "site") ~site ?query ?revisionEntryId
     contentEntryId session =
   let url =
@@ -281,4 +285,13 @@ let id_of_entry entry =
   match parse_url entry.Content.Entry.id with
   | Some (_, _, _, id, _) -> id
   | _ -> "Invalud url: " ^ entry.Content.Entry.id |> failwith
+
+
+let download_attachment entry session =
+  match entry.Content.Entry.content with
+  | Content.Entry.Attachment (_, url) ->
+      GapiRequest.gapi_request GapiRequest.Query url
+        (fun data _ -> GapiPipe.OcamlnetPipe.read_all data)
+        session
+  | _ -> "Invalid attachment entry: " ^ entry.Content.Entry.id |> failwith
 

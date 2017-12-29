@@ -12,14 +12,40 @@ let parse_site_feed = GdataUtils.parse_xml_response Site.parse_feed
 
 let parse_site_entry = GdataUtils.parse_xml_response Site.parse_entry
 
-let get_url ?(rel= `Edit) links = GdataAtom.find_url rel links
+module Rel = struct
+  type t =
+    [ `Batch
+    | `EditMedia
+    | `Feed
+    | `Next
+    | `Parent
+    | `Post
+    | `Revision
+    | `Template
+    | GdataAtom.Rel.t ]
 
-let get_media_url ?(rel= `EditMedia) links = GdataAtom.find_url rel links
+  let to_string l =
+    match l with
+    | `EditMedia | `Post | `Feed | `Batch as e ->
+        GdataExtensions.Rel.to_string e
+    | `Next -> "next"
+    | `Parent -> ns_sites ^ "#parent"
+    | `Revision -> ns_sites ^ "#revision"
+    | `Template -> ns_sites ^ "#template"
+    | #GdataAtom.Rel.t -> GdataAtom.Rel.to_string l
+
+end
+
+let find_url rel links =
+  GdataAtom.find_url_generic
+    (module Rel : GdataAtom.LinkRelation with type t = Rel.t)
+    rel links
+
 
 let get_etag etag = GdataUtils.string_to_option etag
 
-let get_url_etag_content ?rel entry =
-  let url = get_url entry.Content.Entry.links ?rel in
+let get_url_etag_content ?(rel= `Edit) entry =
+  let url = find_url rel entry.Content.Entry.links in
   let etag = get_etag entry.Content.Entry.etag in
   (url, etag)
 
@@ -96,6 +122,28 @@ let query_content_list ?domain ?etag ?query site session =
   in
   GdataService.query ~version ?query_parameters ?etag url parse_content_feed
     session
+
+
+let query_content_fold_entries ?(all= true) ?domain ?(query= []) ~site f a
+    session =
+  let rec fold_aux off a session =
+    query_content_list ?domain ~query site session |> process_results a
+  and process_results a (results, session) =
+    let a = List.fold_right f results.Content.Feed.entries a in
+    if all then
+      let next =
+        try Some (find_url `Next results.Content.Feed.links)
+        with Not_found -> None
+      in
+      match next with
+      | Some next -> do_next a next session
+      | None -> (a, session)
+    else (a, session)
+  and do_next a url session =
+    GdataService.query ~version url parse_content_feed session
+    |> process_results a
+  in
+  fold_aux 1 a session
 
 
 let media_source_payload media =
@@ -225,7 +273,7 @@ let update_content ?media_source entry session =
   let url, etag = get_url_etag_content entry in
   let url =
     match media_source with
-    | Some _ -> get_media_url entry.Content.Entry.links
+    | Some _ -> find_url `EditMedia entry.Content.Entry.links
     | None -> url
   in
   GapiService.service_request_with_data GapiRequest.Update

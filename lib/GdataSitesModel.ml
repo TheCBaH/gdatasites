@@ -1,7 +1,5 @@
 let ns_sites = "http://schemas.google.com/sites/2008"
 
-let endpoint = "https://sites.google.com/feeds/"
-
 let get_sites_prefix namespace =
   if namespace = ns_sites then "site" else GdataACL.get_acl_prefix namespace
 
@@ -235,18 +233,23 @@ module Content = struct
       ; content= Empty }
 
 
+    let parse_xhtml s =
+      let string_input str =
+        let off = ref 0 in
+        fun () ->
+          if !off < String.length str then
+            let ch = str.[!off] in
+            incr off ; Char.code ch
+          else raise End_of_file
+      in
+      let xhtml = GdataUtils.parse_xml (string_input s) (fun x -> x) in
+      xhtml
+
+
     let content_to_xml_data_model = function
       | Empty | Attachment _ -> []
       | Xhtml html ->
-          let string_input str =
-            let off = ref 0 in
-            fun () ->
-              if !off < String.length str then
-                let ch = str.[!off] in
-                incr off ; Char.code ch
-              else raise End_of_file
-          in
-          let xhtml = GdataUtils.parse_xml (string_input html) (fun x -> x) in
+          let xhtml = parse_xhtml html in
           [ GapiCore.AnnotatedTree.Node
               ( [`Element; `Name "content"; `Namespace GdataAtom.ns_atom]
               , [ GapiCore.AnnotatedTree.Leaf

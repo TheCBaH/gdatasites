@@ -242,7 +242,7 @@ module Content = struct
             incr off ; Char.code ch
           else raise End_of_file
       in
-      let xhtml = GdataUtils.parse_xml (string_input s) (fun x -> x) in
+      let xhtml = GdataUtils.parse_xml ~strip:false (string_input s) (fun x -> x) in
       xhtml
 
 
